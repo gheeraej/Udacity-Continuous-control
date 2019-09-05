@@ -25,7 +25,7 @@ def plot_scores(scores, rolling_window=10, save_fig=False):
         plt.savefig(f'figures_scores.png', bbox_inches='tight', pad_inches=0)
         
 
-def train_ddpg(env, agent, save_or_load_path, n_episodes=10000, max_t=1000, print_every=100):
+def train_ddpg(env, agent, num_agents, save_or_load_path, n_episodes=10000, max_t=1000, print_every=100):
     scores_deque = deque(maxlen=print_every)
     scores = []
     for i_episode in range(1, n_episodes+1):
@@ -65,8 +65,27 @@ def train_ddpg(env, agent, save_or_load_path, n_episodes=10000, max_t=1000, prin
 
 
 ### Test the agent
-def test_ddpg(env, agent):
-    pass
+def test_ddpg(env, agent, num_agents, max_t=1000):
+    brain_name = env.brain_names[0]
+    
+    env_info = env.reset(train_mode=False)[brain_name]
+    states = env_info.vector_observations  
+    
+    score = np.zeros(num_agents)
+    for t in range(max_t):
+        action = agent.act(state, add_noise=False)
+        
+        env_info = env.step(actions)[brain_name]   
+        next_states = env_info.vector_observations         # get next state (for each agent)
+        rewards = env_info.rewards                         # get reward (for each agent)
+        dones = env_info.local_done                        # see if episode finished
+
+        agent.step(states, actions, rewards, next_states, dones)
+        states = next_states
+        score += rewards
+        if any(dones):
+            break
+    print("Score of this episode is: %.2f" % np.mean(score))         
                 
                 
 ### Launcher function
@@ -96,7 +115,7 @@ def launch(app_path, train_or_test, save_or_load_path, hyper_file):
     
     if train_or_test:
         if hyper_file is None:
-            scores = train_ddpg(env, agent, save_or_load_path)
+            scores = train_ddpg(env, agent, num_agents, save_or_load_path)
         else:
             with open(hyper_file) as f:
                 variables = json.load(f)
@@ -104,13 +123,13 @@ def launch(app_path, train_or_test, save_or_load_path, hyper_file):
                     print("Parameters file is not well specified")
                     pass
                 else:
-                    scores = train_ddpg(env, agent, save_or_load_path, variables["n_episodes"], variables["max_t"], variables["print_every"])
+                    scores = train_ddpg(env, agent, num_agents, save_or_load_path, variables["n_episodes"], variables["max_t"], variables["print_every"])
 
         plot_scores(scores, True)
         
     else:
         agent.qnetwork_local.load_state_dict(torch.load(save_or_load_path))
-        test_ddpg(env, agent)
+        test_ddpg(env, agent, num_agent)
     
     env.close()
 
